@@ -1,7 +1,0 @@
-streamlit
-google-generativeai
-yt-dlp
-youtube-transcript-api
-Pillow
-nest_asyncio
-requests
