@@ -12,6 +12,7 @@ import nest_asyncio
 import gc
 import random
 from io import BytesIO
+from datetime import datetime # 新增時間模組
 from docx import Document
 from docx.shared import Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -20,8 +21,8 @@ nest_asyncio.apply()
 
 # --- 1. 頁面設定 ---
 st.set_page_config(
-    page_title="TrendScope Master | 腳本生成版",
-    page_icon="🎬",
+    page_title="TrendScope Final Perfect",
+    page_icon="🎯",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -32,13 +33,13 @@ st.markdown("""
     .stApp { background-color: #0F172A !important; color: #E2E8F0 !important; }
     h1, h2, h3, h4, .stMarkdown { color: #F8FAFC !important; }
     
-    /* 按鈕：深海藍漸層 */
+    /* 按鈕：日落橘 (高強對比，提醒這是分析按鈕) */
     .stButton > button {
-        background: linear-gradient(135deg, #0f4c75 0%, #3282b8 100%) !important;
+        background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%) !important;
         color: white !important; font-weight: 800; padding: 0.8rem; border-radius: 8px;
-        border: 1px solid #bbe1fa !important; letter-spacing: 1px;
+        border: 1px solid #fdba74 !important; letter-spacing: 1px;
     }
-    .stButton > button:hover { transform: scale(1.02); box-shadow: 0 0 15px rgba(50, 130, 184, 0.6); }
+    .stButton > button:hover { transform: scale(1.02); box-shadow: 0 0 15px rgba(234, 88, 12, 0.5); }
 
     /* 輸入框 */
     .stTextArea textarea, .stTextInput input {
@@ -47,12 +48,12 @@ st.markdown("""
     
     /* 數據儀表板 */
     .metric-card {
-        background-color: #1e293b; border-left: 5px solid #3282b8;
+        background-color: #1e293b; border-left: 5px solid #f97316;
         padding: 15px; border-radius: 8px; text-align: center; margin-bottom: 15px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.3);
     }
-    .metric-val { font-size: 32px; font-weight: 900; color: #3282b8; }
-    .metric-lbl { font-size: 14px; color: #94a3b8; font-weight: bold; text-transform: uppercase; }
+    .metric-val { font-size: 32px; font-weight: 900; color: #f97316; }
+    .metric-lbl { font-size: 14px; color: #cbd5e1; font-weight: bold; text-transform: uppercase; }
 
     /* 資訊卡片 */
     .info-card {
@@ -82,8 +83,8 @@ def sort_models_by_version(models):
 # --- Word 導出 ---
 def create_word_docx(markdown_text):
     doc = Document()
-    doc.add_heading('TrendScope 分析與腳本報告', 0).alignment = WD_ALIGN_PARAGRAPH.CENTER
-    doc.add_paragraph(f"生成時間: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    doc.add_heading('TrendScope 深度分析報告', 0).alignment = WD_ALIGN_PARAGRAPH.CENTER
+    doc.add_paragraph(f"分析時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
     for line in markdown_text.split('\n'):
         line = line.strip()
@@ -92,9 +93,7 @@ def create_word_docx(markdown_text):
         elif line.startswith('## '): doc.add_heading(line.replace('## ', ''), 2)
         elif line.startswith('### '): doc.add_heading(line.replace('### ', ''), 3)
         elif line.startswith('- '): doc.add_paragraph(line.replace('- ', ''), style='List Bullet')
-        elif line.startswith('|'): doc.add_paragraph(line, style='Intense Quote') # 表格或強調
         else: doc.add_paragraph(line)
-        
     buffer = BytesIO()
     doc.save(buffer)
     buffer.seek(0)
@@ -118,7 +117,7 @@ def load_image_safe(filepath):
 
 # --- 側邊欄 ---
 with st.sidebar:
-    st.title("🎬 控制中心")
+    st.title("🎯 控制中心")
     api_key = st.text_input("Google API Key", type="password", value=st.session_state.get("api_key", ""))
     
     if st.button("🔄 掃描模型清單"):
@@ -134,7 +133,7 @@ with st.sidebar:
     options = st.session_state.sorted_models if st.session_state.sorted_models else ["models/gemini-1.5-flash"]
     selected_model = st.selectbox("核心引擎", options)
     
-    st.info("💡 **腳本生成已啟用**\nAI 將自動撰寫分鏡腳本，您可以直接下載 Word 檔使用。")
+    st.info(f"📅 **時間校正已啟用**\n系統時間：{datetime.now().strftime('%Y-%m-%d')}\nAI 將以此時間為基準進行分析。")
 
 # --- 工具函數 ---
 def get_video_full_info(url):
@@ -149,7 +148,8 @@ def get_video_full_info(url):
                 "title": info.get('title', 'Unknown'),
                 "channel": info.get('uploader', 'Unknown'),
                 "views": info.get('view_count', 0),
-                "thumbnail_url": info.get('thumbnail', None)
+                "thumbnail_url": info.get('thumbnail', None),
+                "upload_date": info.get('upload_date', 'Unknown') # 抓取上傳日期
             }
     except: return None
 
@@ -165,6 +165,7 @@ def download_image(url, idx):
 
 def get_yt_transcript(video_id):
     try:
+        # 增加語言支援：繁中 -> 中文 -> 英文
         t = YouTubeTranscriptApi.get_transcript(video_id, languages=['zh-TW', 'zh', 'en'])
         return TextFormatter().format_transcript(t)
     except: return None
@@ -196,8 +197,8 @@ def safe_api_call(func, *args, **kwargs):
     raise Exception("API 重試失敗")
 
 # --- 主程式 ---
-st.title("TrendScope Master | 腳本生成版")
-st.markdown("### 💠 影音輿情與自動化腳本系統")
+st.title("TrendScope Final Perfect | 時間校正與深度版")
+st.markdown("### 🎯 確保繁體中文輸出・確保深度分析結構")
 
 tab1, tab2 = st.tabs(["📺 影音智慧分析 (YT/TikTok)", "📸 社群圖文分析"])
 
@@ -234,6 +235,9 @@ if (mode == "video" and urls_input) or (mode == "social" and (imgs_input or txt_
 
         with st.status("🚀 正在執行深度運算...", expanded=True) as status:
             try:
+                # 1. 取得當前時間字串
+                current_time_str = datetime.now().strftime("%Y-%m-%d")
+                
                 if mode == "video":
                     urls = [u.strip() for u in urls_input.split('\n') if u.strip()]
                     total = len(urls)
@@ -251,7 +255,8 @@ if (mode == "video" and urls_input) or (mode == "social" and (imgs_input or txt_
                             
                             st.write(f"✅ 已載入: {info['title']}")
                             
-                            meta_str = f"【素材 #{i+1} Metadata】\n標題: {info['title']}\n頻道: {info['channel']}\n觀看數: {info['views']}\n"
+                            # 在 Metadata 中加入上傳日期，供 AI 判斷時效性
+                            meta_str = f"【素材 #{i+1} Metadata】\n標題: {info['title']}\n頻道: {info['channel']}\n觀看數: {info['views']}\n上傳日期(格式YYYYMMDD): {info.get('upload_date')}\n"
                             data_inputs.append(meta_str)
                             if thumb_path: data_inputs.append(thumb_path)
                             raw_context_builder.append(meta_str)
@@ -259,22 +264,26 @@ if (mode == "video" and urls_input) or (mode == "social" and (imgs_input or txt_
                             transcript = None
                             use_audio_first = "gemini-2.5" in selected_model or "gemini-3" in selected_model
                             
-                            if not use_audio_first:
-                                if "youtube" in url or "youtu.be" in url:
-                                    vid_match = re.search(r'(?:v=|\/)([0-9A-Za-z_-]{11})', url)
-                                    if vid_match: transcript = get_yt_transcript(vid_match.group(1))
+                            # 優先抓字幕
+                            if "youtube" in url or "youtu.be" in url:
+                                vid_match = re.search(r'(?:v=|\/)([0-9A-Za-z_-]{11})', url)
+                                if vid_match: transcript = get_yt_transcript(vid_match.group(1))
 
+                            # 邏輯：有字幕用字幕，沒字幕用音訊
                             if transcript:
-                                trans_str = f"素材 #{i+1} 字幕:\n{transcript[:10000]}\n"
+                                trans_str = f"素材 #{i+1} 字幕內容 (請基於此內容分析):\n{transcript[:15000]}\n"
                                 data_inputs.append(trans_str)
                                 raw_context_builder.append(trans_str)
                             else:
-                                status.update(label=f"🎧 素材 {i+1}: 聽覺分析中...", state="running")
+                                # 嘗試下載音訊
+                                status.update(label=f"🎧 素材 {i+1}: 字幕缺失，轉為聽覺分析...", state="running")
                                 aud_path = download_audio(url, i)
                                 if aud_path:
                                     data_inputs.append(aud_path)
                                     temp_files.append(aud_path)
-                                    raw_context_builder.append(f"素材 #{i+1}: [AI 已聆聽音訊]\n")
+                                    raw_context_builder.append(f"素材 #{i+1}: [AI 已聆聽音訊檔案]\n")
+                                else:
+                                    st.warning(f"素材 {i+1} 無法取得內容 (無字幕且音訊下載失敗)，分析可能受限。")
                         
                         progress_bar.progress((i + 1) / total)
                         if i < total - 1: time.sleep(2)
@@ -286,19 +295,33 @@ if (mode == "video" and urls_input) or (mode == "social" and (imgs_input or txt_
                         data_inputs.append(f"\n=== 截圖 #{i+1} ===\n")
                         data_inputs.append(Image.open(img))
 
-                # --- Prompt 設計 (加入第4點腳本生成) ---
+                # --- Prompt 強制校正 ---
                 status.update(label=f"🧠 {selected_model} 正在生成分析與腳本...", state="running")
                 
+                common_instruction = f"""
+                **⚠️ 重要指令 (SYSTEM OVERRIDE):**
+                1. **語言限制**: 輸出必須 **100% 使用繁體中文 (Traditional Chinese)**，禁止使用日文、簡體或英文(專有名詞除外)。
+                2. **時間感知**: 今天是 **{current_time_str}**。請基於此日期判斷影片的時效性（例如：上個月的影片是過去式，不是未來式）。
+                3. **拒絕敷衍**: 絕對**禁止**只輸出「這是一支影片...標題是...」這種簡單摘要。如果內容不足，請從封面圖、標題關鍵字進行深度推論。
+                4. **結構強制**: 必須包含 PART 1, PART 2, PART 3。
+                """
+
                 if mode == "video":
-                    prompt = """
-                    你是一位首席媒體分析師與腳本導演。請進行分析並產出腳本。
+                    prompt = f"""
+                    {common_instruction}
+                    
+                    你是一位首席媒體分析師。請針對提供的素材進行深度分析。
                     
                     請嚴格依照以下結構輸出：
                     
                     ========================================
                     PART 1: 🔬 個別深度診斷 (Individual Analysis)
                     ========================================
-                    (請針對每一個素材，分別簡短分析：流量歸因(人紅/片紅)、核心亮點)
+                    (請針對每一個素材，分別列出：)
+                    **📍 素材 #N**
+                    - **內容深度解析**: (它到底在講什麼？亮點在哪？請引用字幕或畫面細節)
+                    - **流量歸因**: (人紅 vs 片紅？如果是 Apple 發表會，是因為產品紅還是創作者紅？)
+                    - **時效性判斷**: (這是不是舊聞？還是當下熱點？)
 
                     ========================================
                     PART 2: 🌪️ 綜合歸納統整 (Macro Synthesis)
@@ -310,31 +333,19 @@ if (mode == "video" and urls_input) or (mode == "social" and (imgs_input or txt_
                     ========================================
                     PART 3: 🔥 實戰生成：爆款腳本 (AI Script)
                     ========================================
-                    請模仿這次分析中**表現最好、最值得參考**的那支影片的風格與節奏，
-                    幫我寫一個 **30-60秒 短影音拍攝腳本**。主題請設定為與原影片類似的領域。
-                    
-                    請使用以下格式：
-                    **【腳本標題】**: (吸睛的標題)
-                    **【預期情緒】**: (例如：快節奏/懸疑/搞笑)
-                    
-                    | 時間 | 畫面/運鏡 (Visual) | 台詞/旁白 (Audio) | 備註/音效 |
-                    | --- | --- | --- | --- |
-                    | 0-3s | (描述開頭鉤子) | (第一句台詞) | (音效提示) |
-                    | ... | ... | ... | ... |
+                    請模仿表現最好的那支影片，幫我寫一個 **30-60秒 腳本**。
+                    格式：
+                    | 時間 | 畫面 | 台詞 | 音效 |
+                    |---|---|---|---|
                     """
                 else:
-                    prompt = """
+                    prompt = f"""
+                    {common_instruction}
                     請進行社群輿情分析。
                     
-                    PART 1: 📍 個別截圖解讀
+                    PART 1: 📍 個別截圖解讀 (內容/情緒)
                     PART 2: 🌪️ 綜合輿情研判 (爭議點/風向/建議)
-                    
-                    PART 3: 🔥 實戰生成：爆款文案 (AI Copywriting)
-                    請模仿這次最紅的貼文風格，幫我寫一篇適合發在 Threads/IG 的文案。
-                    請包含：
-                    - **吸睛首圖建議**
-                    - **內文 (含分段與 Emoji)**
-                    - **引導留言的結尾 (CTA)**
+                    PART 3: 🔥 實戰生成：爆款文案 (模仿最紅的那篇)
                     """
 
                 response = safe_api_call(model.generate_content, data_inputs)
@@ -354,37 +365,32 @@ if (mode == "video" and urls_input) or (mode == "social" and (imgs_input or txt_
 # ================= 結果顯示 =================
 
 if st.session_state.analysis_report:
-    # 儀表板
     try:
         res = st.session_state.analysis_report
         score_match = re.search(r"指數.*(\d{2,3})", res)
         score = score_match.group(1) if score_match else "N/A"
-        
         tag_match = re.search(r"(密碼|標籤).*[:：]\s*(.+)", res)
         tags = tag_match.group(1).split('\n')[0] if tag_match else "分析中"
         
         c1, c2 = st.columns([1, 3])
         with c1: st.markdown(f'<div class="metric-card"><div class="metric-val">{score}</div><div class="metric-lbl">🔥 綜合熱度</div></div>', unsafe_allow_html=True)
-        with c2: st.markdown(f'<div class="metric-card"><div class="metric-val" style="font-size:20px; color:#e2e8f0;">{tags}</div><div class="metric-lbl">🏷️ 核心關鍵字</div></div>', unsafe_allow_html=True)
+        with c2: st.markdown(f'<div class="metric-card"><div class="metric-val" style="font-size:20px; color:#cbd5e1;">{tags}</div><div class="metric-lbl">🏷️ 核心關鍵字</div></div>', unsafe_allow_html=True)
     except: pass
 
-    # 完整報告
     st.markdown('<div class="info-card">', unsafe_allow_html=True)
     st.markdown("### 📝 完整分析與腳本")
     st.markdown(st.session_state.analysis_report)
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # 導出
     c1, c2 = st.columns([1, 4])
     with c1:
         docx_file = create_word_docx(st.session_state.analysis_report)
-        st.download_button("📄 下載 Word (含腳本)", docx_file, "Script_Report.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        st.download_button("📄 下載 Word", docx_file, "Script_Report.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
     with c2:
         st.download_button("📥 下載 Markdown", st.session_state.analysis_report, "Report.md")
 
-    # 追問
     st.markdown("---")
-    if prompt := st.chat_input("對腳本不滿意？請 AI 修改 (例如：把開頭改得更聳動一點)..."):
+    if prompt := st.chat_input("對腳本不滿意？請 AI 修改..."):
         with st.chat_message("user"): st.markdown(prompt)
         with st.chat_message("assistant"):
             with st.spinner("AI 修改中..."):
