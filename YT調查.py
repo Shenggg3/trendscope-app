@@ -18,8 +18,8 @@ nest_asyncio.apply()
 
 # --- 1. 頁面設定 ---
 st.set_page_config(
-    page_title="TrendScope: Stable Search",
-    page_icon="🔎",
+    page_title="TrendScope: Deep Core",
+    page_icon="🧠",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -105,7 +105,7 @@ def safe_remove(filepath):
 
 # --- 側邊欄 ---
 with st.sidebar:
-    st.title("🕵️ 控制中心")
+    st.title("🧠 深度控制中心")
     api_key = st.text_input("Google API Key", type="password", value=st.session_state.get("api_key", ""))
     
     if st.button("🔄 連結 Google Brain"):
@@ -123,7 +123,7 @@ with st.sidebar:
     
     token_saver_mode = st.toggle("🍃 Token 節約模式 (YT)", value=True)
     st.markdown("---")
-    st.caption("✅ 搜查功能 (Search Tool) 已修復")
+    st.caption("✅ 深度分析 Prompt (Deep Dive) 已恢復")
 
 # --- 工具函數 ---
 def format_timestamp(seconds):
@@ -208,37 +208,18 @@ def download_tiktok_video(url, idx):
         return None
     except: return None
 
-# === 關鍵修復：安全的模型初始化器 (Safe Model Initializer) ===
+# === 安全模型初始化 ===
 def get_model_with_fallback(model_name, use_search=False):
-    """
-    嘗試初始化模型，如果 Search Tool 格式錯誤，則自動降級為無 Search 模式。
-    解決 'Unknown field for FunctionDeclaration' 崩潰問題。
-    """
-    if not use_search:
-        return genai.GenerativeModel(model_name)
-    
-    # 嘗試方法 1: 使用 genai.protos (最穩定的官方寫法)
-    try:
-        search_tool = [genai.protos.Tool(google_search=genai.protos.GoogleSearch())]
-        return genai.GenerativeModel(model_name, tools=search_tool)
-    except Exception as e1:
-        # print(f"Proto init failed: {e1}") # Debug用
-        pass
-
-    # 嘗試方法 2: 字典格式 (舊版 SDK)
+    if not use_search: return genai.GenerativeModel(model_name)
     try:
         return genai.GenerativeModel(model_name, tools=[{'google_search': {}}])
-    except Exception as e2:
-        # print(f"Dict init failed: {e2}") # Debug用
-        pass
-
-    # 最終降級: 放棄 Search，回傳普通模型 (保證不崩潰)
-    st.toast("⚠️ Google Search 初始化失敗 (版本相容性)，已自動切換為標準模式。", icon="🔧")
-    return genai.GenerativeModel(model_name)
+    except:
+        st.toast("⚠️ Search Tool 初始化失敗，已切換為標準模式。", icon="🔧")
+        return genai.GenerativeModel(model_name)
 
 # ================= 主程式介面 =================
-st.title("TrendScope Pro | 搜查完全體")
-st.markdown("### 🔴 YT 結構 | 🔵 TikTok 視覺 | 📸 社群搜查")
+st.title("TrendScope Pro | 深度回歸版")
+st.markdown("### 🔴 YT 深度結構 | 🔵 TikTok 視覺分析 | 📸 社群搜查")
 
 tab_yt, tab_tt, tab_soc = st.tabs(["🔴 YouTube", "🔵 TikTok/Shorts", "📸 Threads/IG 圖文"])
 
@@ -258,7 +239,7 @@ with tab_yt:
         if u: yt_urls.append(u)
         st.markdown('</div>', unsafe_allow_html=True)
     st.markdown('<div class="btn-yt">', unsafe_allow_html=True)
-    if st.button("🚀 執行 YouTube 分析", key="btn_run_yt"): mode = "youtube"
+    if st.button("🚀 執行 YouTube 深度分析", key="btn_run_yt"): mode = "youtube"
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ================= TAB 2: TikTok =================
@@ -279,9 +260,9 @@ with tab_tt:
     if st.button("👁️ 執行 TikTok 視覺分析", key="btn_run_tt"): mode = "tiktok"
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ================= TAB 3: 社群圖文 (搜查功能) =================
+# ================= TAB 3: 社群圖文 =================
 with tab_soc:
-    st.info("💡 **搜查功能已啟用**：上傳圖片後，可在下方 Chat 詢問「這是誰？」，AI 將嘗試聯網搜尋 Wiki。")
+    st.info("💡 **搜查功能已啟用**：支援圖片人物/地點辨識 (Google Search)。")
     imgs_input = st.file_uploader("上傳 Threads/IG 截圖", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
     txt_input = st.text_area("補充說明", height=100)
     st.markdown('<div class="btn-social">', unsafe_allow_html=True)
@@ -301,18 +282,17 @@ if mode:
         
         genai.configure(api_key=api_key)
         
-        # === 核心修改：使用安全的模型初始化函數 ===
-        use_search_in_analysis = (mode == "social") # 社群模式預設開啟搜尋
+        use_search_in_analysis = (mode == "social")
         model = get_model_with_fallback(selected_model, use_search=use_search_in_analysis)
 
         with st.status("🚀 正在執行深度運算...", expanded=True) as status:
             try:
-                # --- YouTube ---
+                # --- YouTube (Prompt 大升級) ---
                 if mode == "youtube":
                     urls = [u for u in yt_urls if u.strip()]
                     total = len(urls)
                     for i, url in enumerate(urls):
-                        status.update(label=f"🔴 分析 YT #{i+1}...", state="running")
+                        status.update(label=f"🔴 深度分析 YT #{i+1}...", state="running")
                         info = get_yt_info(url)
                         title = info['title'] if info else "Unknown"
                         
@@ -321,8 +301,8 @@ if mode:
                         raw_context_builder.append(meta_str)
                         
                         comments = get_video_comments(url)
-                        data_inputs.append(f"留言:\n{comments}")
-                        raw_context_builder.append(f"留言:\n{comments[:500]}...\n")
+                        data_inputs.append(f"【YT #{i+1} 留言輿情】\n{comments}")
+                        raw_context_builder.append(f"留言摘要:\n{comments[:500]}...\n")
 
                         transcript = None
                         if "v=" in url or "youtu.be" in url:
@@ -331,13 +311,13 @@ if mode:
                         
                         use_audio = True
                         if transcript:
-                            trans_str = f"字幕:\n{transcript[:30000]}"
+                            trans_str = f"【YT #{i+1} 字幕內容(含時間碼)】:\n{transcript[:35000]}"
                             data_inputs.append(trans_str)
                             raw_context_builder.append(trans_str + "\n")
                             if token_saver_mode: use_audio = False
 
                         if use_audio:
-                            status.update(label=f"🎧 下載音訊 #{i+1}...", state="running")
+                            status.update(label=f"🎧 下載音訊 #{i+1} (無字幕)...", state="running")
                             aud_path = download_yt_audio(url, i)
                             if aud_path:
                                 g_file = upload_to_gemini(aud_path)
@@ -346,7 +326,42 @@ if mode:
                                     st.session_state.gemini_files_list.append(g_file)
                                     temp_files.append(aud_path)
                                     raw_context_builder.append(f"[音訊掛載: {g_file.name}]")
-                    prompt = "請對上述影片進行結構歸納 (Markdown Table)。"
+                    
+                    # === 恢復您最愛的深度 Prompt ===
+                    prompt = f"""
+                    **⚠️ 首席流量分析師指令 (SYSTEM OVERRIDE):**
+                    你現在是 YouTube 演算法與內容策略專家。請針對上述素材進行「深度拆解」。
+                    我們不要淺層摘要，我們要的是「為什麼會紅」的底層邏輯。
+
+                    請產出【TrendScope 深度結構報告】：
+
+                    ========================================
+                    PART 1: 🔬 個別深度診斷 (Deep Dive)
+                    ========================================
+                    (請針對每一支影片，結合 Metadata、字幕內容與網友留言進行分析)
+                    **📍 影片 #N - [標題]**
+                    - **內容核心與鉤子 (Hook)**: 前 15 秒到底做了什麼留住觀眾？(請引用畫面或台詞)
+                    - **流量歸因**: 是標題黨？還是內容乾貨？還是情緒共鳴？
+                    - **🗣️ 輿情真實風向**: 網友留言都在討論什麼？(支持/反對/玩梗/抓錯)
+                    - **⏱️ 高光時刻 (Highlights)**: 請列出 2-3 個最精彩的時間點 [MM:SS] 及其內容。
+
+                    ========================================
+                    PART 2: 🌪️ 流量密碼交叉比對 (Macro Analysis)
+                    ========================================
+                    ### 1. 📊 綜合比較矩陣
+                    | 影片標題 | 封面/選題策略 | 敘事節奏 | 觀眾情緒 | 爆紅指數 (1-5⭐) |
+
+                    ### 2. 🧠 共同爆款公式
+                    *   **選題邏輯**: 這些影片切中了什麼共同的人性弱點或需求？
+                    *   **結構共性**: 它們是否都用了類似的開場或結尾？
+
+                    ========================================
+                    PART 3: 💡 最佳執行建議 (Actionable Advice)
+                    ========================================
+                    若我要製作一支超越這些競品的影片，我應該：
+                    1. (具體建議)
+                    2. (具體建議)
+                    """
 
                 # --- TikTok ---
                 elif mode == "tiktok":
@@ -373,7 +388,12 @@ if mode:
                                 data_inputs.append(g_file)
                                 st.session_state.gemini_files_list.append(g_file)
                                 raw_context_builder.append(f"\n=== TikTok #{i+1} ===\n[影片掛載: {g_file.name}]")
-                    prompt = "請觀看上述影片並進行視覺歸納 (Markdown Table)。自動擬定標題。"
+                    prompt = """
+                    **TikTok 視覺分析指令:**
+                    請「觀看」上述影片並進行歸納。**請根據內容自動擬定標題**。
+                    PART 1: 👁️ 視覺矩陣 (AI Title | Visual Hook | BGM | Viral Factor)
+                    PART 2: ⚡ 短影音流量公式 (前3秒重點 / 節奏 / 引導)
+                    """
 
                 # --- Social ---
                 elif mode == "social":
@@ -434,7 +454,6 @@ if st.session_state.analysis_report:
 
         if st.button("✨ 生成客製化腳本"):
             with st.spinner("撰寫中..."):
-                # 使用安全模型函數，這裡通常不需要 Search
                 s_model = get_model_with_fallback(selected_model, use_search=False)
                 s_prompt = f"""
                 **專業編劇指令:**
@@ -457,18 +476,17 @@ if st.session_state.analysis_report:
         with st.chat_message("user"): st.markdown(prompt)
         with st.chat_message("assistant"):
             with st.spinner("思考/搜尋中..."):
-                # === 關鍵：Chat 這裡開啟 Search ===
                 chat_model = get_model_with_fallback(selected_model, use_search=True)
                 
                 chat_inputs = []
                 
-                # 1. 放入所有媒體檔案 (YT/TikTok)
+                # 放入所有媒體檔案 (YT/TikTok)
                 if st.session_state.gemini_files_list:
                     for i, f in enumerate(st.session_state.gemini_files_list):
                         chat_inputs.append(f"【媒體 #{i+1}】")
                         chat_inputs.append(f)
                 
-                # 2. 放入所有社群圖片 (Social)
+                # 放入所有社群圖片 (Social)
                 if st.session_state.social_images_list:
                     for i, img in enumerate(st.session_state.social_images_list):
                         chat_inputs.append(f"【圖片 #{i+1}】")
