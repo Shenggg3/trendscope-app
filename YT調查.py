@@ -18,8 +18,8 @@ nest_asyncio.apply()
 
 # --- 1. 頁面設定 ---
 st.set_page_config(
-    page_title="TrendScope: Search & Studio",
-    page_icon="🕵️",
+    page_title="TrendScope: Stable Search",
+    page_icon="🔎",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -30,18 +30,13 @@ st.markdown("""
     .stApp { background-color: #0F172A !important; color: #E2E8F0 !important; }
     h1, h2, h3, h4, .stMarkdown { color: #F8FAFC !important; }
     
-    /* 按鈕樣式 */
     .btn-yt > button { background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%) !important; color: white !important; border: none; width: 100%; margin-top: 10px; }
     .btn-tiktok > button { background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%) !important; color: white !important; border: none; width: 100%; margin-top: 10px; }
     .btn-social > button { background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%) !important; color: white !important; border: none; width: 100%; margin-top: 10px; }
     
     .stButton > button { border-radius: 8px; font-weight: bold; }
-
     .info-card { background-color: #111827; padding: 20px; border-radius: 12px; border: 1px solid #374151; margin-bottom: 20px; }
-    
-    /* 腳本工坊樣式 (放在 expander 內) */
     .script-studio { border-left: 4px solid #f97316; padding-left: 15px; }
-    
     .yt-box { border-left: 4px solid #ef4444; background: #1e293b; padding: 10px; border-radius: 4px; margin-bottom: 10px;}
     .tt-box { border-left: 4px solid #06b6d4; background: #1e293b; padding: 10px; border-radius: 4px; margin-bottom: 10px;}
 </style>
@@ -51,8 +46,8 @@ st.markdown("""
 if "analysis_report" not in st.session_state: st.session_state.analysis_report = ""
 if "raw_context" not in st.session_state: st.session_state.raw_context = ""
 if "sorted_models" not in st.session_state: st.session_state.sorted_models = []
-if "gemini_files_list" not in st.session_state: st.session_state.gemini_files_list = [] # 存 File API 物件
-if "social_images_list" not in st.session_state: st.session_state.social_images_list = [] # 存 PIL Image 物件 (供 Chat 用)
+if "gemini_files_list" not in st.session_state: st.session_state.gemini_files_list = [] 
+if "social_images_list" not in st.session_state: st.session_state.social_images_list = [] 
 if "generated_script" not in st.session_state: st.session_state.generated_script = ""
 
 # --- 4. 智慧 API 呼叫 ---
@@ -128,8 +123,7 @@ with st.sidebar:
     
     token_saver_mode = st.toggle("🍃 Token 節約模式 (YT)", value=True)
     st.markdown("---")
-    st.caption("✅ 腳本工坊：預設摺疊")
-    st.caption("✅ 社群搜查：Google Search 啟用")
+    st.caption("✅ 搜查功能 (Search Tool) 已修復")
 
 # --- 工具函數 ---
 def format_timestamp(seconds):
@@ -214,6 +208,34 @@ def download_tiktok_video(url, idx):
         return None
     except: return None
 
+# === 關鍵修復：安全的模型初始化器 (Safe Model Initializer) ===
+def get_model_with_fallback(model_name, use_search=False):
+    """
+    嘗試初始化模型，如果 Search Tool 格式錯誤，則自動降級為無 Search 模式。
+    解決 'Unknown field for FunctionDeclaration' 崩潰問題。
+    """
+    if not use_search:
+        return genai.GenerativeModel(model_name)
+    
+    # 嘗試方法 1: 使用 genai.protos (最穩定的官方寫法)
+    try:
+        search_tool = [genai.protos.Tool(google_search=genai.protos.GoogleSearch())]
+        return genai.GenerativeModel(model_name, tools=search_tool)
+    except Exception as e1:
+        # print(f"Proto init failed: {e1}") # Debug用
+        pass
+
+    # 嘗試方法 2: 字典格式 (舊版 SDK)
+    try:
+        return genai.GenerativeModel(model_name, tools=[{'google_search': {}}])
+    except Exception as e2:
+        # print(f"Dict init failed: {e2}") # Debug用
+        pass
+
+    # 最終降級: 放棄 Search，回傳普通模型 (保證不崩潰)
+    st.toast("⚠️ Google Search 初始化失敗 (版本相容性)，已自動切換為標準模式。", icon="🔧")
+    return genai.GenerativeModel(model_name)
+
 # ================= 主程式介面 =================
 st.title("TrendScope Pro | 搜查完全體")
 st.markdown("### 🔴 YT 結構 | 🔵 TikTok 視覺 | 📸 社群搜查")
@@ -241,7 +263,6 @@ with tab_yt:
 
 # ================= TAB 2: TikTok =================
 with tab_tt:
-    st.info("💡 支援網址下載或直接上傳 MP4")
     col1, col2 = st.columns(2)
     tiktok_files_map = [] 
     with col1:
@@ -260,7 +281,7 @@ with tab_tt:
 
 # ================= TAB 3: 社群圖文 (搜查功能) =================
 with tab_soc:
-    st.info("💡 **搜查功能已啟用**：上傳圖片後，可在下方 Chat 詢問「這是誰？」或「這在哪裡？」，AI 將聯網搜尋 Wiki/News。")
+    st.info("💡 **搜查功能已啟用**：上傳圖片後，可在下方 Chat 詢問「這是誰？」，AI 將嘗試聯網搜尋 Wiki。")
     imgs_input = st.file_uploader("上傳 Threads/IG 截圖", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
     txt_input = st.text_area("補充說明", height=100)
     st.markdown('<div class="btn-social">', unsafe_allow_html=True)
@@ -275,20 +296,14 @@ if mode:
         st.session_state.analysis_report = ""
         st.session_state.raw_context = ""
         st.session_state.gemini_files_list = []
-        st.session_state.social_images_list = [] # 清空圖片列表
+        st.session_state.social_images_list = [] 
         st.session_state.generated_script = ""
         
         genai.configure(api_key=api_key)
         
-        # === 關鍵：社群模式下啟用 Search Tool ===
-        tools_config = [{'google_search': {}}] if mode == "social" else None
-        try:
-            if tools_config:
-                model = genai.GenerativeModel(selected_model, tools=tools_config)
-            else:
-                model = genai.GenerativeModel(selected_model)
-        except:
-            model = genai.GenerativeModel(selected_model) # Fallback
+        # === 核心修改：使用安全的模型初始化函數 ===
+        use_search_in_analysis = (mode == "social") # 社群模式預設開啟搜尋
+        model = get_model_with_fallback(selected_model, use_search=use_search_in_analysis)
 
         with st.status("🚀 正在執行深度運算...", expanded=True) as status:
             try:
@@ -367,13 +382,12 @@ if mode:
                         pil_img = Image.open(img)
                         data_inputs.append(f"\n=== 圖片 #{i+1} ===\n")
                         data_inputs.append(pil_img)
-                        # 將圖片存入 Session 供 Chat 使用
                         st.session_state.social_images_list.append(pil_img)
                     
                     prompt = """
                     **社群圖文分析:**
                     請分析圖片的視覺重點與潛在情緒。
-                    **注意**：若使用者後續詢問圖片中人物是誰，請準備好使用 Google Search 進行辨識。
+                    **注意**：我已啟用 Google Search，若有必要請隨時查詢網路資訊。
                     """
 
                 # --- Generate ---
@@ -420,7 +434,8 @@ if st.session_state.analysis_report:
 
         if st.button("✨ 生成客製化腳本"):
             with st.spinner("撰寫中..."):
-                s_model = genai.GenerativeModel(selected_model)
+                # 使用安全模型函數，這裡通常不需要 Search
+                s_model = get_model_with_fallback(selected_model, use_search=False)
                 s_prompt = f"""
                 **專業編劇指令:**
                 參考報告，寫一個 {s_duration} 的 {s_style} 腳本。
@@ -442,8 +457,8 @@ if st.session_state.analysis_report:
         with st.chat_message("user"): st.markdown(prompt)
         with st.chat_message("assistant"):
             with st.spinner("思考/搜尋中..."):
-                # 這裡使用帶有 Google Search Tool 的模型
-                chat_model = genai.GenerativeModel(selected_model, tools=[{'google_search': {}}])
+                # === 關鍵：Chat 這裡開啟 Search ===
+                chat_model = get_model_with_fallback(selected_model, use_search=True)
                 
                 chat_inputs = []
                 
@@ -453,7 +468,7 @@ if st.session_state.analysis_report:
                         chat_inputs.append(f"【媒體 #{i+1}】")
                         chat_inputs.append(f)
                 
-                # 2. 放入所有社群圖片 (Social) -> 讓 AI 可以看圖搜人
+                # 2. 放入所有社群圖片 (Social)
                 if st.session_state.social_images_list:
                     for i, img in enumerate(st.session_state.social_images_list):
                         chat_inputs.append(f"【圖片 #{i+1}】")
