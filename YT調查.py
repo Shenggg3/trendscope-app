@@ -18,8 +18,8 @@ nest_asyncio.apply()
 
 # --- 1. 頁面設定 ---
 st.set_page_config(
-    page_title="TrendScope: Multi-Focus Fix",
-    page_icon="💎",
+    page_title="TrendScope: Search & Clean",
+    page_icon="🔎",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -30,6 +30,7 @@ st.markdown("""
     .stApp { background-color: #0F172A !important; color: #E2E8F0 !important; }
     h1, h2, h3, h4, .stMarkdown { color: #F8FAFC !important; }
     
+    /* 按鈕樣式 */
     .btn-yt > button {
         background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%) !important;
         color: white !important; font-weight: 800; border: 1px solid #fca5a5 !important;
@@ -45,17 +46,21 @@ st.markdown("""
         color: white !important; font-weight: 800; border: 1px solid #a78bfa !important;
         width: 100%; margin-top: 10px;
     }
+    
     .stTextArea textarea, .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] {
         background-color: #1E293B !important; color: white !important; border: 1px solid #475569 !important;
     }
+    
     .info-card {
         background-color: #111827; padding: 20px; border-radius: 12px; 
         border: 1px solid #374151; margin-bottom: 20px;
     }
-    .script-studio {
+    
+    .script-studio-box {
         background-color: #1c1917; border: 2px solid #f97316; border-radius: 12px; padding: 20px;
-        margin-top: 20px;
+        margin-top: 10px;
     }
+    
     .yt-box { border-left: 4px solid #ef4444; padding-left: 10px; margin-bottom: 10px; background: #1e293b; padding: 10px; border-radius: 4px;}
     .tt-box { border-left: 4px solid #06b6d4; padding-left: 10px; margin-bottom: 10px; background: #1e293b; padding: 10px; border-radius: 4px;}
 </style>
@@ -65,7 +70,6 @@ st.markdown("""
 if "analysis_report" not in st.session_state: st.session_state.analysis_report = ""
 if "raw_context" not in st.session_state: st.session_state.raw_context = ""
 if "sorted_models" not in st.session_state: st.session_state.sorted_models = []
-# === 修正關鍵：改為 List 儲存多個檔案 ===
 if "gemini_files_list" not in st.session_state: st.session_state.gemini_files_list = []
 if "generated_script" not in st.session_state: st.session_state.generated_script = ""
 
@@ -84,7 +88,6 @@ def smart_api_call(func, *args, **kwargs):
             if is_rate_limit or is_server_error:
                 wait_time = base_wait * (2 ** attempt) 
                 if is_server_error: wait_time = max(5, wait_time // 2)
-
                 st.toast(f"⚠️ API 冷卻中... {wait_time}秒後重試 ({attempt+1}/{max_retries})", icon="⏳")
                 with st.empty():
                     for i in range(wait_time, 0, -1):
@@ -151,7 +154,9 @@ with st.sidebar:
     selected_model = st.selectbox("核心引擎", options)
     
     token_saver_mode = st.toggle("🍃 Token 節約模式 (僅限 YouTube)", value=True)
-    st.info("💡 **TikTok** 建議使用 Flash 模型以支援視訊分析。")
+    st.markdown("---")
+    st.caption("✅ Google Search 人物肉搜")
+    st.caption("✅ 腳本工坊 (隨選啟動)")
 
 # --- 工具函數 ---
 def format_timestamp(seconds):
@@ -253,7 +258,6 @@ st.markdown("### 🔴 YouTube 結構分析 | 🔵 TikTok 視覺分析 | 📸 社
 
 tab_yt, tab_tt, tab_soc = st.tabs(["🔴 YouTube 戰情室", "🔵 TikTok/Shorts 實驗室", "📸 社群圖文分析"])
 
-# 全局變數
 mode = ""
 data_inputs = []
 raw_context_builder = []
@@ -280,21 +284,18 @@ with tab_yt:
 with tab_tt:
     st.subheader("TikTok / Shorts 視覺分析")
     st.caption("AI 將直接觀看影片 (MP4) 進行分析。")
-    
     col1, col2 = st.columns(2)
     tiktok_files_map = [] 
-
     with col1:
-        st.markdown("#### 🔗 方式 A: 網址 (嘗試下載)")
+        st.markdown("#### 🔗 方式 A: 網址")
         num_tt = st.number_input("TikTok 連結數量", 0, 10, 1, key="tt_num")
         for i in range(num_tt):
             st.markdown(f'<div class="tt-box">', unsafe_allow_html=True)
             u = st.text_input(f"TikTok 連結 #{i+1}", key=f"tt_{i}")
             if u: tiktok_files_map.append(('url', u))
             st.markdown('</div>', unsafe_allow_html=True)
-
     with col2:
-        st.markdown("#### 📂 方式 B: 檔案上傳 (推薦)")
+        st.markdown("#### 📂 方式 B: 檔案")
         uploaded_files = st.file_uploader("上傳 MP4", accept_multiple_files=True, type=['mp4'])
         for f in uploaded_files: tiktok_files_map.append(('file', f))
 
@@ -305,6 +306,7 @@ with tab_tt:
 # ================= TAB 3: 社群圖文 =================
 with tab_soc:
     st.subheader("社群圖文分析 (FB/IG/Threads)")
+    st.caption("📷 支援人物識別：請在下方 Chat 問「這是誰？」")
     imgs_input = st.file_uploader("上傳截圖", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
     txt_input = st.text_area("補充說明", height=100)
     
@@ -320,7 +322,6 @@ if mode:
     else:
         st.session_state.analysis_report = ""
         st.session_state.raw_context = ""
-        # === 修正：清空檔案列表 ===
         st.session_state.gemini_files_list = []
         st.session_state.generated_script = ""
         
@@ -329,30 +330,25 @@ if mode:
 
         with st.status("🚀 分析程序啟動中...", expanded=True) as status:
             try:
-                # ================= 🔴 YouTube 邏輯 =================
+                # ================= 🔴 YouTube =================
                 if mode == "youtube":
                     urls = [u for u in yt_urls if u.strip()]
                     total = len(urls)
-                    
                     for i, url in enumerate(urls):
                         status.update(label=f"🔴 分析 YouTube #{i+1}/{total}...", state="running")
-                        
                         info = get_yt_info(url)
                         title = info['title'] if info else "Unknown YT"
                         days = calculate_days_ago(info.get('upload_date','')) if info else ""
                         
-                        # === 修正：加入明確的分隔線到 Context ===
                         meta_str = f"\n\n=== 影片 #{i+1} : {title} ===\n"
                         if info: meta_str += f"Views: {info.get('view_count',0)} | Time: {days}\n"
                         data_inputs.append(meta_str)
                         raw_context_builder.append(meta_str)
                         
-                        # 留言
                         comments = get_video_comments(url)
                         data_inputs.append(f"留言:\n{comments}")
-                        raw_context_builder.append(f"留言摘要:\n{comments[:500]}...\n")
+                        raw_context_builder.append(f"留言:\n{comments[:500]}...\n")
 
-                        # 字幕
                         transcript = None
                         if "v=" in url or "youtu.be" in url:
                             vid_match = re.search(r'(?:v=|\/)([0-9A-Za-z_-]{11})', url)
@@ -362,11 +358,8 @@ if mode:
                         if transcript:
                             trans_str = f"字幕內容:\n{transcript[:30000]}"
                             data_inputs.append(trans_str)
-                            # 儲存到 Context 供後續查詢
                             raw_context_builder.append(trans_str + "\n")
-                            if token_saver_mode: 
-                                use_audio = False
-                                st.caption(f"✅ #{i+1} 已有字幕，跳過音訊下載。")
+                            if token_saver_mode: use_audio = False
 
                         if use_audio:
                             status.update(label=f"🎧 #{i+1} 準備音訊中...", state="running")
@@ -375,11 +368,9 @@ if mode:
                                 g_file = upload_to_gemini(aud_path)
                                 if g_file:
                                     data_inputs.append(g_file)
-                                    # === 修正：加入列表 ===
                                     st.session_state.gemini_files_list.append(g_file)
                                     temp_files.append(aud_path)
                                     raw_context_builder.append(f"[已掛載音訊檔案: {g_file.name}]")
-                        
                         time.sleep(1)
 
                     prompt = """
@@ -389,13 +380,12 @@ if mode:
                     PART 2: 🏗️ 結構公式 (Opening -> Body -> CTA)
                     """
 
-                # ================= 🔵 TikTok 邏輯 =================
+                # ================= 🔵 TikTok =================
                 elif mode == "tiktok":
                     total = len(tiktok_files_map)
                     for i, (src_type, src_content) in enumerate(tiktok_files_map):
                         status.update(label=f"🔵 處理 TikTok 素材 #{i+1}/{total}...", state="running")
                         video_path = None
-                        
                         if src_type == 'url':
                             video_path = download_tiktok_video(src_content, i)
                             if not video_path:
@@ -408,13 +398,12 @@ if mode:
                             temp_files.append(video_path)
 
                         if video_path:
-                            status.update(label=f"👁️ #{i+1} 上傳影片給 AI 觀看中...", state="running")
+                            status.update(label=f"👁️ #{i+1} 上傳影片...", state="running")
                             g_file = upload_to_gemini(video_path, mime_type='video/mp4')
                             if g_file:
                                 msg = f"【TikTok #{i+1}】(AI請觀看影片自訂標題)"
                                 data_inputs.append(msg)
                                 data_inputs.append(g_file)
-                                # === 修正：加入列表 ===
                                 st.session_state.gemini_files_list.append(g_file)
                                 raw_context_builder.append(f"\n=== TikTok #{i+1} ===\n[已掛載影片: {g_file.name}]")
 
@@ -425,7 +414,7 @@ if mode:
                     PART 2: ⚡ 短影音流量公式 (前3秒重點 / 節奏 / 引導)
                     """
                 
-                # ================= 📸 社群圖文 邏輯 =================
+                # ================= 📸 社群圖文 =================
                 elif mode == "social":
                     if txt_input: data_inputs.append(f"補充說明: {txt_input}")
                     for i, img in enumerate(imgs_input):
@@ -434,7 +423,8 @@ if mode:
                     
                     prompt = """
                     **社群圖文分析指令:**
-                    PART 1: 🖼️ 視覺重點分析
+                    請針對上傳的圖片進行輿情與視覺分析。
+                    PART 1: 🖼️ 視覺與人物重點
                     PART 2: 📝 文案與情緒渲染力
                     """
 
@@ -461,66 +451,89 @@ if st.session_state.analysis_report:
     docx = create_word_docx(st.session_state.analysis_report, "分析報告")
     st.download_button("📥 下載報告", docx, "Report.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 
-    # === 腳本工坊 ===
+    # === 🎬 腳本工坊 (使用 Toggle 隱藏) ===
     st.markdown("---")
-    st.markdown('<div class="script-studio">', unsafe_allow_html=True)
-    st.subheader("🎬 腳本生成工坊")
-    
-    c1, c2 = st.columns([1, 2])
-    with c1:
-        n_actors = st.number_input("人數", 1, 5, 1)
-        s_duration = st.selectbox("長度", ["30秒 (Shorts)", "60秒 (Reels)", "3分鐘 (YT長片)"])
-        s_style = st.selectbox("風格", ["幽默", "專業", "Vlog", "戲劇", "爭議"])
-    
-    actors_info = []
-    st.markdown("#### 🎭 詳細角色設定")
-    cols = st.columns(n_actors)
-    for i in range(n_actors):
-        with cols[i]:
-            st.markdown(f"**角色 {i+1}**")
-            name = st.text_input(f"名字", value=f"A{i}", key=f"nm_{i}")
-            gender = st.selectbox(f"性別", ["男", "女"], key=f"gd_{i}")
-            persona = st.text_input(f"人設", placeholder="例: 毒舌", key=f"ps_{i}")
-            actors_info.append(f"- {name} ({gender}): {persona}")
+    # ✅ 關鍵修改：使用 Toggle 按需開啟
+    if st.toggle("🎬 開啟腳本工坊 (Script Studio)"):
+        st.markdown('<div class="script-studio-box">', unsafe_allow_html=True)
+        st.subheader("🎬 腳本生成工坊")
+        
+        c1, c2 = st.columns([1, 2])
+        with c1:
+            n_actors = st.number_input("人數", 1, 5, 1)
+            s_duration = st.selectbox("長度", ["30秒 (Shorts)", "60秒 (Reels)", "3分鐘 (YT長片)"])
+            s_style = st.selectbox("風格", ["幽默", "專業", "Vlog", "戲劇", "爭議"])
+        
+        actors_info = []
+        st.markdown("#### 🎭 詳細角色設定")
+        cols = st.columns(n_actors)
+        for i in range(n_actors):
+            with cols[i]:
+                st.markdown(f"**角色 {i+1}**")
+                name = st.text_input(f"名字", value=f"A{i}", key=f"nm_{i}")
+                gender = st.selectbox(f"性別", ["男", "女"], key=f"gd_{i}")
+                persona = st.text_input(f"人設", placeholder="例: 毒舌", key=f"ps_{i}")
+                actors_info.append(f"- {name} ({gender}): {persona}")
 
-    if st.button("✨ 生成客製化腳本"):
-        with st.spinner("撰寫中..."):
-            s_model = genai.GenerativeModel(selected_model)
-            s_prompt = f"""
-            **專業編劇指令:**
-            參考報告結構，寫一個 {s_duration} 的 {s_style} 腳本。
-            角色：
-            {chr(10).join(actors_info)}
-            格式：Markdown 表格 (時間|畫面|角色|台詞|音效)
-            """
-            res = smart_api_call(s_model.generate_content, f"報告:\n{st.session_state.analysis_report}\n指令:\n{s_prompt}")
-            st.session_state.generated_script = res.text
+        if st.button("✨ 生成客製化腳本"):
+            with st.spinner("撰寫中..."):
+                s_model = genai.GenerativeModel(selected_model)
+                s_prompt = f"""
+                **專業編劇指令:**
+                參考報告結構，寫一個 {s_duration} 的 {s_style} 腳本。
+                角色：{chr(10).join(actors_info)}
+                格式：Markdown 表格 (時間|畫面|角色|台詞|音效)
+                """
+                res = smart_api_call(s_model.generate_content, f"報告:\n{st.session_state.analysis_report}\n指令:\n{s_prompt}")
+                st.session_state.generated_script = res.text
+        
+        st.markdown('</div>', unsafe_allow_html=True)
 
     if st.session_state.generated_script:
+        st.markdown("### ✨ 您的客製化腳本")
         st.markdown(st.session_state.generated_script)
         s_docx = create_word_docx(st.session_state.generated_script, "腳本")
         st.download_button("📥 下載腳本", s_docx, "Script.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 
-    # === Chat (支援多檔案) ===
+    # === Chat (支援 Google Search 人物辨識) ===
     st.markdown("---")
-    if prompt := st.chat_input("對分析或腳本有疑問？(支援音訊回放查詢)"):
+    chat_label = "💬 對報告有疑問？"
+    if mode == "social":
+        chat_label = "💬 想知道這是誰？(輸入「這是誰」啟動 Google Search)"
+    
+    if prompt := st.chat_input(chat_label):
         with st.chat_message("user"): st.markdown(prompt)
         with st.chat_message("assistant"):
-            with st.spinner("查詢中..."):
-                chat_model = genai.GenerativeModel(selected_model)
+            with st.spinner("思考與搜尋中..."):
+                
+                # === 關鍵修改：為 Chat 啟用 Google Search 工具 ===
+                tools = []
+                # 簡單判斷：如果使用者問「是誰」「哪裡」等問題，或者在 Social 模式，就啟用搜尋
+                if mode == "social" or "是誰" in prompt or "搜尋" in prompt or "wiki" in prompt.lower():
+                    tools = [{'google_search': {}}]
+                
+                try:
+                    chat_model = genai.GenerativeModel(selected_model, tools=tools)
+                except:
+                    chat_model = genai.GenerativeModel(selected_model) # Fallback
+
                 chat_inputs = []
                 
-                # === 修正關鍵：將所有已上傳的檔案都傳給 AI ===
-                # 這樣 AI 才能區分 "第一部" 和 "第三部"
+                # 1. 傳送檔案
                 if st.session_state.gemini_files_list:
                     for i, f in enumerate(st.session_state.gemini_files_list):
-                        chat_inputs.append(f"【參考媒體檔案 #{i+1}】")
+                        chat_inputs.append(f"【參考媒體 #{i+1}】")
                         chat_inputs.append(f)
-                    chat_inputs.append("【系統提示】以上是所有相關的媒體檔案，請根據使用者指定的編號（如：第一部影片）進行回放或查詢。")
                 
-                chat_inputs.append(f"【文字資料記憶】\n{st.session_state.raw_context}")
+                # 2. 傳送上下文
+                chat_inputs.append(f"【原始資料】\n{st.session_state.raw_context}")
                 chat_inputs.append(f"【分析報告】\n{st.session_state.analysis_report}")
-                chat_inputs.append(f"【問題】{prompt}")
+                chat_inputs.append(f"【使用者問題】{prompt}")
+                chat_inputs.append("""
+                **System Prompt:**
+                1. 如果使用者詢問截圖中人物的身份 (例如「這是誰」)，請務必利用 Google Search 工具搜尋視覺特徵或文字線索。
+                2. 若找到人物，請提供簡單介紹與 Wikipedia/社群 連結。
+                """)
                 
                 res = smart_api_call(chat_model.generate_content, chat_inputs).text
                 st.markdown(res)
