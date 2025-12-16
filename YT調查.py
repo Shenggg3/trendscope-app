@@ -112,9 +112,11 @@ with st.sidebar:
     game_genre = st.selectbox("遊戲類型", 
         ["MMORPG (重度)", "SLG (策略/4X)", "Casino/Slots (博弈)", "Hypercasual (超休閒)", "Puzzle (三消/解謎)", "Idle (放置)"])
     
+    # --- 修正點在此 ---
+    # 確保 default 的值與 options 列表中的字串完全一致
     target_audience = st.multiselect("目標受眾 (Bartle 心理學)", 
         ["Killers (競爭者)", "Achievers (成就者)", "Socializers (社交者)", "Explorers (探索者)"],
-        default=["Achievers"])
+        default=["Achievers (成就者)"]) # <--- 這裡已修正
     
     ad_goal = st.radio("當前優化目標", ["降低 CPI (吸量)", "提高 ROAS (大R)", "提高留存 (Retension)"])
     
