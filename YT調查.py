@@ -1,301 +1,232 @@
 import streamlit as st
 import google.generativeai as genai
-import yt_dlp
-import os
 import time
-import pandas as pd
+import os
+import shutil
 from PIL import Image
-from io import BytesIO
 from datetime import datetime
-import re
+from io import BytesIO
 
-# --- 1. 核心配置與風格 ---
+# --- 1. 頁面全屏與專業風格設定 ---
 st.set_page_config(
-    page_title="AdCore 2026: UA Command Center",
-    page_icon="🎯",
+    page_title="GameAd Architect 2026 | 爆量素材實驗室",
+    page_icon="🚀",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# 2026 Cyberpunk AdTech 風格
+# 注入駭客級投手儀表板 CSS
 st.markdown("""
 <style>
-    .stApp { background-color: #050505 !important; color: #00FF99 !important; }
-    h1, h2, h3 { color: #ffffff !important; font-family: 'Roboto Mono', monospace; }
-    .stSelectbox, .stTextInput, .stTextArea { color: white !important; }
-    
-    /* 核心按鈕 */
-    .stButton > button {
-        background: linear-gradient(90deg, #00C9FF 0%, #92FE9D 100%);
-        color: #000000;
-        font-weight: 900;
-        border: none;
-        padding: 12px 24px;
-        text-transform: uppercase;
-        letter-spacing: 1px;
+    .stApp { background-color: #0b0f19 !important; color: #e0e6ed !important; }
+    h1, h2, h3 { color: #00e5ff !important; font-family: 'Roboto Mono', monospace; }
+    .stButton>button { 
+        background: linear-gradient(90deg, #00c6ff 0%, #0072ff 100%); 
+        color: white; border: none; font-weight: bold; padding: 10px 20px;
+        box-shadow: 0 0 15px rgba(0, 198, 255, 0.5);
     }
-    
-    /* 分析卡片 */
     .metric-card {
-        background: #111;
-        border: 1px solid #333;
-        padding: 15px;
-        border-radius: 8px;
-        border-left: 5px solid #00FF99;
-        margin-bottom: 10px;
+        background: #16213e; border-left: 4px solid #00e5ff; padding: 15px; margin: 10px 0; border-radius: 5px;
     }
-    
-    /* 警告與提示 */
-    .warning-box { border-left: 5px solid #FFD700; background: #222; padding: 10px; }
-    .hook-box { border-left: 5px solid #FF0055; background: #221010; padding: 10px; }
+    .hook-alert { color: #ff0055; font-weight: bold; }
+    .success-green { color: #00ff9d; font-weight: bold; }
+    div[data-testid="stExpander"] details summary { color: #00e5ff; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. 工具函數庫 ---
+# --- 2. 核心功能函數 ---
 
-def get_gemini_model(api_key, model_name="gemini-1.5-flash"):
-    """獲取 Gemini 模型實例"""
+def init_gemini(api_key):
+    if not api_key: return None
     genai.configure(api_key=api_key)
-    # 針對廣告分析，我們需要較高的創造力與精準度
-    generation_config = {
-        "temperature": 0.8,
-        "top_p": 0.95,
-        "top_k": 40,
-        "max_output_tokens": 8192,
-    }
-    return genai.GenerativeModel(model_name=model_name, generation_config=generation_config)
+    # 使用具備頂尖視覺理解能力的 Pro 模型
+    return genai.GenerativeModel("gemini-1.5-pro")
 
-def download_video_segment(url, filename_prefix):
-    """下載影片，針對廣告用途優化 (MP4)"""
-    timestamp = int(time.time())
-    filename = f"{filename_prefix}_{timestamp}.mp4"
+def upload_video_to_gemini(video_path):
+    """上傳影片並等待處理完成"""
+    video_file = genai.upload_file(video_path, mime_type="video/mp4")
     
-    ydl_opts = {
-        'outtmpl': filename,
-        'format': 'best[ext=mp4]/best',
-        'quiet': True,
-        'no_warnings': True,
-        # 針對 Shorts/TikTok 優化 User-Agent
-        'http_headers': {'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X)'}
-    }
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-        if os.path.exists(filename):
-            return filename
+    # 等待處理 (Polling)
+    bar = st.progress(0)
+    status_text = st.empty()
+    
+    wait_time = 0
+    while video_file.state.name == "PROCESSING":
+        status_text.text(f"📡 AI 視覺神經網路解析中... ({wait_time}s)")
+        bar.progress(min(wait_time * 2, 95))
+        time.sleep(2)
+        wait_time += 2
+        video_file = genai.get_file(video_file.name)
+        
+    if video_file.state.name == "FAILED":
+        st.error("❌ 影片解析失敗，請確認格式。")
         return None
-    except Exception as e:
-        st.error(f"下載失敗 (可能因版權或地區限制): {str(e)}")
-        return None
+    
+    bar.progress(100)
+    status_text.empty()
+    return video_file
 
-def upload_to_gemini(path, mime_type='video/mp4'):
-    """上傳素材到 Gemini 暫存空間"""
-    try:
-        file = genai.upload_file(path, mime_type=mime_type)
-        # 等待處理完成
-        while file.state.name == "PROCESSING":
-            time.sleep(1)
-            file = genai.get_file(file.name)
-        if file.state.name == "FAILED":
-            raise ValueError("Gemini 處理檔案失敗")
-        return file
-    except Exception as e:
-        st.error(f"上傳錯誤: {e}")
-        return None
-
-# --- 3. 側邊欄：戰略設定 ---
+# --- 3. 側邊欄控制中心 ---
 with st.sidebar:
-    st.title("🛡️ 投放師戰情室")
-    api_key = st.text_input("Gemini API Key", type="password")
+    st.title("⚡ 2026 UA Command Center")
+    st.markdown("專為遊戲廣告優化師打造")
     
-    st.markdown("### 🎮 產品屬性")
-    game_genre = st.selectbox("遊戲類型", 
-        ["MMORPG (重度)", "SLG (策略/4X)", "Casino/Slots (博弈)", "Hypercasual (超休閒)", "Puzzle (三消/解謎)", "Idle (放置)"])
-    
-    # --- 修正點在此 ---
-    # 確保 default 的值與 options 列表中的字串完全一致
-    target_audience = st.multiselect("目標受眾 (Bartle 心理學)", 
-        ["Killers (競爭者)", "Achievers (成就者)", "Socializers (社交者)", "Explorers (探索者)"],
-        default=["Achievers (成就者)"]) # <--- 這裡已修正
-    
-    ad_goal = st.radio("當前優化目標", ["降低 CPI (吸量)", "提高 ROAS (大R)", "提高留存 (Retension)"])
+    api_key = st.text_input("輸入 Google API Key", type="password")
     
     st.markdown("---")
-    st.info("💡 2026 趨勢提示：\n真人實拍 + AI 特效混剪是目前 ROI 最高的素材形式。")
-
-# --- 4. 主介面邏輯 ---
-st.title("AdCore 2026: Game UA Engine")
-st.caption(f"目標產品: {game_genre} | 優化方向: {ad_goal}")
-
-tab_spy, tab_lab, tab_prompt = st.tabs(["🕵️ 競品拆解 (Spy)", "🧪 變體工廠 (A/B Test)", "🎨 AI 生產指令 (GenAI)"])
-
-# ================= TAB 1: 競品拆解 (The Spy) =================
-with tab_spy:
-    st.markdown("### 🩸 解剖爆款素材")
-    st.markdown("上傳競品的高消耗素材，AI 將反向工程其「吸量邏輯」。")
+    st.success("🟢 系統狀態: 正常運作")
+    st.info("💡 核心邏輯: Spend > Click > Install")
     
-    col1, col2 = st.columns([1, 1])
+    with st.expander("🛠️ 使用說明"):
+        st.write("""
+        1. **素材法醫**: 上傳競品或自家跑量影片，分析為什麼紅。
+        2. **裂變工廠**: 針對一支影片生成 5 種翻拍/優化方案。
+        3. **設計師工單**: 生成精確的 Motion Guide。
+        """)
+
+# --- 4. 主程式邏輯 ---
+st.title("🚀 GameAd Architect: 爆量素材逆向工程")
+st.markdown("#### \"Decode the Winning Creative. Scale the Budget.\"")
+
+# 初始化 Session
+if "analysis_result" not in st.session_state: st.session_state.analysis_result = ""
+if "video_file_ref" not in st.session_state: st.session_state.video_file_ref = None
+
+# 分頁設計
+tab_analyze, tab_iterate, tab_brief = st.tabs(["🧬 素材法醫 (Deconstruct)", "🧪 裂變工廠 (Iterate)", "📝 設計師工單 (Brief)"])
+
+# === TAB 1: 素材法醫 (深度分析) ===
+with tab_analyze:
+    col1, col2 = st.columns([1, 2])
+    
     with col1:
-        video_url = st.text_input("輸入 YouTube/TikTok 連結")
+        st.markdown("### 📂 素材輸入")
+        uploaded_file = st.file_uploader("上傳 MP4 (競品/自家素材)", type=["mp4"])
+        game_type = st.selectbox("遊戲類型", ["MMORPG", "SLG (策略)", "卡牌 RPG", "超休閒 (Hyper-casual)", "博奕 (Casino)", "三消 (Match-3)"], index=1)
+        kpi_focus = st.multiselect("關注指標", ["高消耗 (High Spend)", "高點擊 (High CTR)", "高轉化 (High CVR)", "低成本 (Low CPI)"], default=["高消耗 (High Spend)"])
+        
+        analyze_btn = st.button("🔥 開始逆向工程")
+
     with col2:
-        uploaded_video = st.file_uploader("或直接上傳 MP4", type=['mp4'])
-    
-    if st.button("🚀 執行深度屍檢 (Autopsy)", key="btn_spy"):
-        if not api_key:
-            st.error("請輸入 API Key！")
-        else:
-            status = st.status("正在進行多模態分析...", expanded=True)
-            video_path = None
-            
-            # 處理影片來源
-            if uploaded_video:
-                video_path = f"temp_ad_{int(time.time())}.mp4"
-                with open(video_path, "wb") as f: f.write(uploaded_video.getbuffer())
-            elif video_url:
-                status.write("📥 下載競品素材中...")
-                video_path = download_video_segment(video_url, "competitor_ad")
-            
-            if video_path:
-                status.write("👁️ 上傳至 Gemini 視覺中樞...")
-                gemini_file = upload_to_gemini(video_path)
+        if analyze_btn and uploaded_file and api_key:
+            model = init_gemini(api_key)
+            if model:
+                # 存暫存檔
+                temp_filename = "temp_ad.mp4"
+                with open(temp_filename, "wb") as f:
+                    f.write(uploaded_file.getbuffer())
                 
-                if gemini_file:
-                    status.write("🧠 正在分析黃金 3 秒與轉化邏輯...")
-                    model = get_gemini_model(api_key)
-                    
-                    # === 2026 頂級投放師 Prompt ===
+                # 上傳至 Gemini
+                with st.spinner("正在將素材傳輸至雲端大腦..."):
+                    video_file_gemini = upload_video_to_gemini(temp_filename)
+                    st.session_state.video_file_ref = video_file_gemini
+                
+                if video_file_gemini:
+                    # 2026 投手專用 Prompt
                     prompt = f"""
-                    你現在是 2026 年最頂尖的手機遊戲廣告投放專家 (UA Manager)。
-                    請針對這支遊戲廣告進行「逐幀拆解」。我們的目標是模仿它的高消耗邏輯。
+                    **角色設定**: 你是 2026 年最頂尖的手機遊戲廣告優化師 (UA Lead)，精通 AppGrowing、SensorTower 數據分析，並且深知人類多巴胺機制。
                     
-                    分析對象：{game_genre} 手遊
-                    目標受眾：{target_audience}
+                    **任務**: 分析這支「{game_type}」類型的遊戲廣告影片，告訴我它為什麼能獲得「{', '.join(kpi_focus)}」。
                     
-                    請輸出以下 Markdown 報告：
+                    請輸出以下結構的【深度診斷報告】(使用繁體中文 Markdown):
 
-                    ### 1. 🎣 黃金 3 秒 (The Hook)
-                    *   **視覺衝擊**: 前 3 秒畫面發生了什麼？(例如：戰力飆升、失敗懲罰、美女/帥哥、巨物恐懼)
-                    *   **聽覺鉤子**: BGM 是激昂、懸疑還是 ASMR？有無 TTS 旁白？
-                    *   **Hook 類型**: (例如：Gameplay Fail, Before/After, 隱藏福利, 假玩 Fake Ads)
+                    ### 1. 👁️ 黃金前 3 秒 (The Hook) - 決定生死的關鍵
+                    *   **視覺衝擊**: 第一個畫面是什麼？(例如：巨物恐懼、大量金幣掉落、美女、甚至是故意失敗的操作)
+                    *   **聽覺刺激**: 有無 ASMR？激昂 BGM？或是 AI 語音旁白？
+                    *   **心理鉤子**: 利用了什麼人性弱點？(貪婪、色慾、強迫症、從眾心理、優越感)
+                    
+                    ### 2. 🧠 內容拆解 (The Body)
+                    *   **素材類型**: 是 真人劇情(Live Action)、虛假玩法(Fake Gameplay)、真實錄屏(Real Gameplay) 還是 CG 動畫？
+                    *   **節奏分析**: 剪輯節奏是快還是慢？有無反轉？
+                    *   **核心痛點/爽點**: 影片展示了什麼解決方案或快感來源？
+                    
+                    ### 3. 🎯 轉化誘導 (The CTA)
+                    *   **最終畫面**: 停留在什麼畫面？
+                    *   **誘導話術**: 既然是「{game_type}」，它用了什麼誘因？(例如：送1000抽、戰力+999、限時領取)
 
-                    ### 2. 🧠 心理學歸因 (Why it converts?)
-                    *   利用了哪種人性弱點？(貪婪、色慾、恐懼、好勝心、強迫症)
-                    *   這支廣告是針對 Bartle 玩家分類中的哪一類？為什麼？
-
-                    ### 3. 🎬 結構拆解 (Timeline)
-                    | 時間 | 畫面內容 (Visual) | 文案/旁白 (Copy) | 刺激點 (Trigger) |
-                    |---|---|---|---|
-                    | 0-3s | ... | ... | ... |
-                    | 3-10s| ... | ... | ... |
-                    | 10s+ | ... | ... | ... |
-
-                    ### 4. 📉 缺點與優化機會 (Optimization)
-                    *   這支廣告哪裡做得不夠好？
-                    *   如果我們要抄襲這個創意，如何改得更強？(給出具體建議)
-
-                    ### 5. 🏷️ 標籤 (Tags for Library)
-                    請給出 5 個形容詞標籤 (例如：#解壓 #割草 #戰力比拼)
+                    ### 4. 💡 投手總結 (Media Buyer Verdict)
+                    *   **爆量評分**: (1-10分，請嚴格評分)
+                    *   **為什麼會跑量**: 請用一句話總結它的底層邏輯 (例如：用超休閒的玩法包裝重度 SLG，降低了用戶下載門檻)。
                     """
                     
-                    response = model.generate_content([gemini_file, prompt])
-                    st.session_state['spy_result'] = response.text
-                    status.update(label="分析完成！", state="complete")
-                    
-                    # 清理檔案
-                    try: os.remove(video_path) 
-                    except: pass
-            else:
-                st.error("無法處理影片，請檢查來源。")
+                    with st.spinner("AI 正在逐幀解構爆量邏輯..."):
+                        response = model.generate_content([video_file_gemini, prompt])
+                        st.session_state.analysis_result = response.text
+                        st.success("✅ 分析完成！")
+                        
+                        # 清理暫存
+                        os.remove(temp_filename)
 
-    if 'spy_result' in st.session_state:
+    # 顯示結果
+    if st.session_state.analysis_result:
+        st.markdown("---")
         st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-        st.markdown(st.session_state['spy_result'])
+        st.markdown(st.session_state.analysis_result)
         st.markdown('</div>', unsafe_allow_html=True)
 
-# ================= TAB 2: 變體工廠 (Variation Lab) =================
-with tab_lab:
-    st.markdown("### 🧪 A/B Test 腳本生成矩陣")
-    st.markdown("基於分析結果或概念，生成 3 種不同切入點的腳本 (Hook/Pain/Pleasure)。")
+# === TAB 2: 裂變工廠 (素材優化與翻拍) ===
+with tab_iterate:
+    st.markdown("### 🧪 A/B Test 素材裂變引擎")
+    st.info("基於分析結果，生成 5 種不同的翻拍方向，延長素材壽命 (Life-cycle)。")
     
-    base_concept = st.text_area("輸入核心玩法或概念 (或是貼上剛剛的分析結果)", 
-                                value=st.session_state.get('spy_result', "例如：玩家扮演一個很弱的史萊姆，透過吞噬敵人進化成魔王。"),
-                                height=150)
-    
-    col_a, col_b = st.columns(2)
-    with col_a:
-        script_duration = st.selectbox("廣告秒數", ["15s (TikTok/Shorts)", "30s (一般投放)", "60s (深度素材)"])
-    with col_b:
-        visual_style = st.selectbox("視覺風格", ["UE5 高質感 (Cinematic)", "UGC 真人實況 (Native)", "2D 動畫 (Cartoon)", "假玩/失敗向 (Fail Run)"])
-
-    if st.button("⚡ 生成三組變體腳本", key="btn_script"):
-        if not api_key:
-            st.error("API Key 缺失")
-        else:
-            with st.spinner("正在構建高轉化腳本..."):
-                model = get_gemini_model(api_key)
-                prompt_lab = f"""
-                你是資深廣告編劇。請根據以下概念，為 {game_genre} 遊戲撰寫 3 支完全不同的廣告腳本，用於 A/B Test。
-                
-                核心概念：{base_concept}
-                時長限制：{script_duration}
-                視覺風格：{visual_style}
-                
-                請產出以下三種變體：
-                1.  **變體 A (Praise/Power)**: 強調爽感、數值爆炸、進化快感。
-                2.  **變體 B (Pain/Fail)**: 強調失敗、智商挑戰、「只有 1% 人能過關」。
-                3.  **變體 C (Native/Story)**: 像是玩家真實推薦、或是帶有劇情的轉折。
-
-                格式要求 (請用表格)：
-                **變體 X**
-                | 秒數 | 畫面描述 (給美術看) | 旁白/音效 (給後製看) | 畫面文字 (Overlay) |
-                |---|---|---|---|
-                """
-                
-                res = model.generate_content(prompt_lab)
-                st.session_state['script_result'] = res.text
-    
-    if 'script_result' in st.session_state:
-        st.markdown(st.session_state['script_result'])
-        st.download_button("📥 下載腳本 (TXT)", st.session_state['script_result'], "ad_scripts.txt")
-
-# ================= TAB 3: AI 生產指令 (GenAI Prompts) =================
-with tab_prompt:
-    st.markdown("### 🎨 AI 素材生產線")
-    st.markdown("將你的腳本轉化為 **Midjourney / Runway Gen-2 / Sora** 的標準指令。")
-    
-    if 'script_result' not in st.session_state:
-        st.info("請先在「變體工廠」生成腳本，或在此輸入描述。")
-        raw_script = st.text_area("輸入場景描述", "一個史萊姆吞噬了巨龍，發出金光")
+    if st.session_state.analysis_result and st.session_state.video_file_ref:
+        direction = st.radio("優化方向", ["保留玩法，換開頭 (Remix Hook)", "保留開頭，換BGM/配音 (Remix Audio)", "完全翻拍 (Deep Fake/UGC)", "針對特定節日 (Seasonal)"])
+        
+        if st.button("⚡ 生成裂變方案"):
+            model = init_gemini(api_key)
+            iter_prompt = f"""
+            **任務**: 基於上述的廣告分析報告，針對「{direction}」這個方向，提供 5 個具體的 A/B Test 變體 (Variants)。
+            **目標**: 降低 CPI，提高 ROAS。
+            
+            請以表格呈現：
+            | 變體編號 | 變更點 (What changed) | 預期效果/心理假設 (Hypothesis) | 製作難度 (低/中/高) |
+            | :--- | :--- | :--- | :--- |
+            | V1 | (例如：開頭改成真人美女驚訝表情) | (例如：利用性吸引力提升前3秒留存) | 低 |
+            ...
+            
+            並在最後給出一個「大膽嘗試 (Wildcard)」的建議，完全跳脫現有框架。
+            """
+            
+            with st.spinner("正在計算最佳 A/B Test 路徑..."):
+                # 注意：這裡我們需要把之前的對話 context 帶入，或者直接把分析結果作為 prompt 的一部分
+                full_prompt = f"分析報告:\n{st.session_state.analysis_result}\n\n指令:\n{iter_prompt}"
+                # 這裡為了簡單，直接傳送 prompt 與 video (雖然 video 在這步其實非必要，但為了保持 context 也可以)
+                # 為了省 token，我們直接用 text-to-text 即可，因為分析報告已有詳情
+                response_iter = model.generate_content(full_prompt)
+                st.markdown(response_iter.text)
     else:
-        raw_script = st.text_area("參考腳本", st.session_state['script_result'], height=200)
-    
-    tool_target = st.selectbox("目標 AI 工具", ["Midjourney v6 (圖片)", "Runway Gen-3 / Sora (影片)", "Stable Diffusion (ControlNet)"])
-    
-    if st.button("✨ 生成 AI Prompts", key="btn_prompts"):
-        if not api_key: st.error("API Key 缺失")
-        else:
-            with st.spinner("正在翻譯為 AI 語言..."):
-                model = get_gemini_model(api_key)
-                prompt_gen = f"""
-                你現在是 AI Prompt Engineer。請閱讀上述腳本，提取關鍵的「視覺畫面 (Key Visuals)」。
-                將這些畫面轉化為 {tool_target} 的專用提示詞 (Prompts)。
-                
-                要求：
-                1. 英文輸出 (English Prompts)。
-                2. 包含必要的參數 (如 Midjourney 的 --ar 9:16 --v 6.0)。
-                3. 增加畫質與風格修飾詞 (e.g., Unreal Engine 5 render, 8k, hyper-realistic, cinematic lighting)。
-                4. 針對廣告用途，畫面必須吸睛 (High contrast, dynamic composition)。
-                
-                輸出格式：
-                **[場景 1]**
-                Prompt: `......`
-                
-                **[場景 2]**
-                Prompt: `......`
-                """
-                res_p = model.generate_content(raw_script + "\n" + prompt_gen)
-                st.code(res_p.text, language="markdown")
+        st.warning("請先在「素材法醫」分頁完成影片分析。")
 
-# --- 頁尾 ---
+# === TAB 3: 設計師工單 (Brief Generator) ===
+with tab_brief:
+    st.markdown("### 📝 Motion Designer 需求單自動生成")
+    st.caption("將優化師的思維直接轉譯為設計師看得懂的分鏡腳本。")
+    
+    if st.session_state.analysis_result:
+        brief_style = st.selectbox("需求單風格", ["詳細分鏡表 (Storyboard)", "快速修改單 (Quick Edit)", "UGC 網紅拍攝腳本"])
+        
+        if st.button("📄 產出需求單"):
+            model = init_gemini(api_key)
+            brief_prompt = f"""
+            **任務**: 將分析報告轉化為一份專業的「{brief_style}」。
+            **對象**: 公司的美術設計師或外包剪輯師。
+            
+            格式要求：
+            1. **專案名稱**: [自動命名]
+            2. **參考素材**: (描述原始影片特點)
+            3. **核心修改需求**: 
+            4. **詳細腳本 (時間軸 | 畫面 | 音效/口播 | 備註)**
+            
+            請確保語言精簡、指令明確，減少設計師的溝通成本。
+            """
+            
+            full_prompt_brief = f"原始分析:\n{st.session_state.analysis_result}\n\n指令:\n{brief_prompt}"
+            response_brief = model.generate_content(full_prompt_brief)
+            
+            st.text_area("複製以下內容給設計師", value=response_brief.text, height=400)
+    else:
+        st.warning("請先完成分析。")
+
+# --- Footer ---
 st.markdown("---")
-st.caption("AdCore 2026 v1.0 | Designed for High-Performance UA Teams | Powered by Google Gemini 1.5/2.0")
+st.markdown("© 2026 GameAd Intelligence Unit | Built for High Scalability")
