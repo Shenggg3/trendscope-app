@@ -12,7 +12,7 @@ from io import BytesIO
 from google.api_core import exceptions
 
 # --- 1. UIUX 專業樣式定義 ---
-st.set_page_config(page_title="UA Sovereign Pro 👑", page_icon="👑", layout="wide")
+st.set_page_config(page_title="影片UA影片生成 👑", page_icon="👑", layout="wide")
 
 st.markdown("""
 <style>
@@ -78,9 +78,9 @@ def create_docx_report(text, title):
 
 # --- 3. 初始化 Session ---
 init_keys = {
-    'step': 1, 'api_connected': False, 'api_key': "", 'active_model': "gemini-1.5-flash",
+    'step': 1, 'api_connected': False, 'api_key': "", 'active_model': "gemini-2.5-flash",
     'psy_analysis': {}, 'game_dna': {}, 'final_script': {}, 
-    'ref_data_text': "", 'target_game': "Last War", 
+    'ref_data_text': "", 'target_game': " 寒霜啟示錄 ", 
     'duration': 30, 'style_preset': "死侍式賤萌", 'custom_style': "", 
     'yt_urls_raw': "", 'gemini_video_refs': []
 }
