@@ -5,3 +5,4 @@ yt-dlp
 Pillow
 requests
 nest_asyncio
+python-docx
